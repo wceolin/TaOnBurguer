@@ -295,3 +295,68 @@ export async function updateOrderStatus(
     return { isFallback: true };
   }
 }
+
+export async function fetchBannerConfig(): Promise<{
+  bannerUrl: string | null;
+  isFallback: boolean;
+}> {
+  try {
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getConfig`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const list: Record<string, unknown>[] | null = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.config)
+          ? data.config
+          : null;
+
+    if (list) {
+      const entry = list.find(
+        (item) => String(item.Chave ?? item.chave ?? '').trim() === 'Banner_URL'
+      );
+      const val = entry ? String(entry.Valor ?? entry.valor ?? '').trim() : '';
+      return { bannerUrl: val || null, isFallback: false };
+    }
+
+    if (data && typeof data === 'object' && 'Banner_URL' in data) {
+      const val = String((data as Record<string, unknown>).Banner_URL ?? '').trim();
+      return { bannerUrl: val || null, isFallback: false };
+    }
+
+    return { bannerUrl: null, isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao carregar configuração do banner.',
+      error
+    );
+    return { bannerUrl: null, isFallback: true };
+  }
+}
+
+export async function saveBannerConfig(
+  bannerUrl: string
+): Promise<{ bannerUrl: string; isFallback: boolean }> {
+  try {
+    await postToAppsScript({
+      action: 'salvarBanner',
+      banner_url: bannerUrl,
+    });
+    return { bannerUrl, isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao salvar banner. Usando fallback local.',
+      error
+    );
+    return { bannerUrl, isFallback: true };
+  }
+}
+

@@ -45,7 +45,7 @@ interface AdminPanelProps {
   isStoreOpen: boolean;
   onToggleStoreOpen: (open: boolean) => void;
   heroImageUrl: string;
-  onUpdateHeroImage: (newUrl: string) => void;
+  onUpdateHeroImage: (newUrl: string) => Promise<void>;
   onClose: () => void;
   onMenuChanged: (updatedMenu: MenuItem[]) => void;
   onShowToast: (message: string, type?: ToastType) => void;
@@ -86,6 +86,7 @@ export function AdminPanel({
   // Home screen image editor state
   const [isEditingHero, setIsEditingHero] = useState(false);
   const [draftHeroUrl, setDraftHeroUrl] = useState(heroImageUrl);
+  const [savingHero, setSavingHero] = useState(false);
 
   useEffect(() => {
     if (!isEditingHero) {
@@ -792,15 +793,20 @@ export function AdminPanel({
 
               {isEditingHero ? (
                 <form
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault();
                     const cleaned = draftHeroUrl.trim();
                     if (!cleaned) {
                       onShowToast('Informe o link da nova imagem', 'error');
                       return;
                     }
-                    onUpdateHeroImage(cleaned);
-                    setIsEditingHero(false);
+                    setSavingHero(true);
+                    try {
+                      await onUpdateHeroImage(cleaned);
+                      setIsEditingHero(false);
+                    } finally {
+                      setSavingHero(false);
+                    }
                   }}
                   className="space-y-4"
                 >
@@ -814,18 +820,20 @@ export function AdminPanel({
                     <input
                       id="hero-img-url"
                       type="text"
+                      disabled={savingHero}
                       value={draftHeroUrl}
                       onChange={(e) => setDraftHeroUrl(e.target.value)}
                       placeholder="https://..."
-                      className="w-full h-11 px-3.5 rounded-xl bg-[#121212] border border-white/[0.1] text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00]"
+                      className="w-full h-11 px-3.5 rounded-xl bg-[#121212] border border-white/[0.1] text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00] disabled:opacity-60"
                     />
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                     <button
                       type="button"
+                      disabled={savingHero}
                       onClick={() => setDraftHeroUrl(HERO_IMAGE_URL)}
-                      className="h-10 px-3.5 rounded-xl bg-[#121212] hover:bg-zinc-800 border border-white/[0.08] text-xs font-semibold text-zinc-300 flex items-center gap-1.5 cursor-pointer"
+                      className="h-10 px-3.5 rounded-xl bg-[#121212] hover:bg-zinc-800 border border-white/[0.08] text-xs font-semibold text-zinc-300 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Usar imagem padrão</span>
@@ -834,19 +842,28 @@ export function AdminPanel({
                     <div className="flex items-center gap-2.5 ml-auto">
                       <button
                         type="button"
+                        disabled={savingHero}
                         onClick={() => {
                           setDraftHeroUrl(heroImageUrl);
                           setIsEditingHero(false);
                         }}
-                        className="h-10 px-4 rounded-xl bg-[#121212] hover:bg-zinc-800 border border-white/[0.08] text-sm font-semibold text-zinc-300 cursor-pointer"
+                        className="h-10 px-4 rounded-xl bg-[#121212] hover:bg-zinc-800 border border-white/[0.08] text-sm font-semibold text-zinc-300 cursor-pointer disabled:opacity-50"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
-                        className="h-10 px-5 rounded-xl bg-[#FF6B00] hover:bg-[#FF7D1F] text-[#121212] text-sm font-bold cursor-pointer"
+                        disabled={savingHero}
+                        className="h-10 px-5 rounded-xl bg-[#FF6B00] hover:bg-[#FF7D1F] text-[#121212] text-sm font-bold flex items-center gap-2 cursor-pointer disabled:opacity-60"
                       >
-                        Salvar Imagem
+                        {savingHero ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Salvando...</span>
+                          </>
+                        ) : (
+                          <span>Salvar Imagem</span>
+                        )}
                       </button>
                     </div>
                   </div>

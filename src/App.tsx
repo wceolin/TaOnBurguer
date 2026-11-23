@@ -17,7 +17,7 @@ import {
   HERO_IMAGE_URL,
   STORE_OPEN_STORAGE_KEY,
 } from './data/fallbackData';
-import { fetchMenu } from './services/api';
+import { fetchBannerConfig, fetchMenu, saveBannerConfig } from './services/api';
 import type { CartItem, MenuItem, ToastMessage, ToastType } from './types';
 
 function readInitialStoreOpen(): boolean {
@@ -30,7 +30,7 @@ function readInitialStoreOpen(): boolean {
   }
 }
 
-function readInitialHeroImage(): string {
+function readCachedHeroImage(): string {
   try {
     const saved = window.localStorage.getItem(HERO_IMAGE_STORAGE_KEY);
     return saved && saved.trim() ? saved : HERO_IMAGE_URL;
@@ -53,7 +53,7 @@ export default function App() {
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isStoreOpen, setIsStoreOpen] = useState<boolean>(readInitialStoreOpen);
-  const [heroImageUrl, setHeroImageUrl] = useState<string>(readInitialHeroImage);
+  const [heroImageUrl, setHeroImageUrl] = useState<string>(HERO_IMAGE_URL);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -86,15 +86,16 @@ export default function App() {
   );
 
   const handleUpdateHeroImage = useCallback(
-    (newUrl: string) => {
+    async (newUrl: string) => {
       const cleaned = newUrl.trim() || HERO_IMAGE_URL;
+      await saveBannerConfig(cleaned);
       setHeroImageUrl(cleaned);
       try {
         window.localStorage.setItem(HERO_IMAGE_STORAGE_KEY, cleaned);
       } catch {
         // Ignore storage errors
       }
-      showToast('Imagem da tela inicial atualizada!', 'success');
+      showToast('Banner da campanha atualizado!', 'success');
     },
     [showToast]
   );
@@ -117,9 +118,22 @@ export default function App() {
     const load = async (silent = false) => {
       if (!silent) setLoadingMenu(true);
       try {
-        const { items } = await fetchMenu();
+        const [{ items }, bannerRes] = await Promise.all([
+          fetchMenu(),
+          fetchBannerConfig(),
+        ]);
         if (mounted) {
           setMenuItems(items);
+          if (bannerRes.bannerUrl) {
+            setHeroImageUrl(bannerRes.bannerUrl);
+            try {
+              window.localStorage.setItem(HERO_IMAGE_STORAGE_KEY, bannerRes.bannerUrl);
+            } catch {
+              // Ignore storage errors
+            }
+          } else if (bannerRes.isFallback) {
+            setHeroImageUrl(readCachedHeroImage());
+          }
         }
       } finally {
         if (mounted && !silent) {
