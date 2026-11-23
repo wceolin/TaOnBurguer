@@ -1,0 +1,297 @@
+import { FALLBACK_MENU, FALLBACK_ORDERS } from '../data/fallbackData';
+import type {
+  CreateOrderPayload,
+  MenuItem,
+  OrderRecord,
+  OrderStatus,
+  SaveMenuItemPayload,
+} from '../types';
+import {
+  normalizeOrderStatus,
+  parseBoolean,
+  parsePrice,
+} from '../utils/formatters';
+
+export const GOOGLE_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbyEnnIgRj-rh_1f2S85Ti4lBCzTVy3t1yeAiX9jPVhgHwnsKD-0DfnHLRwQFW-Lc2k/exec';
+
+// In-memory store used seamlessly only if the remote Google Apps Script endpoint is unreachable
+let localFallbackMenu: MenuItem[] = [...FALLBACK_MENU];
+let localFallbackOrders: OrderRecord[] = [...FALLBACK_ORDERS];
+
+function normalizeMenuItem(raw: Record<string, unknown>, idx: number): MenuItem {
+  return {
+    ID: String(raw.ID ?? raw.id ?? `ITEM-${idx + 1}`),
+    Nome: String(raw.Nome ?? raw.nome ?? 'Item sem nome'),
+    Descricao: String(raw.Descricao ?? raw.descricao ?? ''),
+    Preco: parsePrice(raw.Preco ?? raw.preco ?? 0),
+    Categoria: String(raw.Categoria ?? raw.categoria ?? 'Artesanais'),
+    Imagem_URL: String(raw.Imagem_URL ?? raw.imagem_url ?? ''),
+    Disponivel: parseBoolean(raw.Disponivel ?? raw.disponivel ?? true),
+  };
+}
+
+function normalizeOrderRecord(raw: Record<string, unknown>, idx: number): OrderRecord {
+  const itensVal = raw.Itens_JSON ?? raw.itens_json ?? raw.itens ?? '[]';
+  return {
+    ID_Pedido: String(raw.ID_Pedido ?? raw.id_pedido ?? raw.id ?? `PED-${1000 + idx}`),
+    Data_Hora: String(raw.Data_Hora ?? raw.data_hora ?? new Date().toISOString()),
+    Cliente_Nome: String(raw.Cliente_Nome ?? raw.cliente_nome ?? raw.cliente ?? 'Cliente'),
+    Cliente_WhatsApp: String(raw.Cliente_WhatsApp ?? raw.cliente_whatsapp ?? raw.whatsapp ?? ''),
+    Endereco: String(raw.Endereco ?? raw.endereco ?? ''),
+    Itens_JSON: typeof itensVal === 'string' ? itensVal : JSON.stringify(itensVal),
+    Total: parsePrice(raw.Total ?? raw.total ?? 0),
+    Forma_Pagamento: String(raw.Forma_Pagamento ?? raw.forma_pagamento ?? raw.pagamento ?? 'Pix'),
+    Status: normalizeOrderStatus(raw.Status ?? raw.status ?? 'Pendente'),
+  };
+}
+
+async function postToAppsScript<T extends Record<string, unknown>>(
+  payload: Record<string, unknown>
+): Promise<T> {
+  // Using plain text body avoids CORS preflight OPTIONS errors on Google Apps Script doPost
+  const response = await fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const text = await response.text();
+  if (!text) {
+    return {} as T;
+  }
+
+  try {
+    const parsed = JSON.parse(text) as T;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      (parsed.success === false || typeof parsed.error === 'string' || typeof parsed.erro === 'string')
+    ) {
+      throw new Error(
+        String(parsed.error ?? parsed.erro ?? parsed.message ?? 'Erro na resposta da planilha')
+      );
+    }
+    return parsed;
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      return {} as T;
+    }
+    throw err;
+  }
+}
+
+export async function fetchMenu(): Promise<{ items: MenuItem[]; isFallback: boolean }> {
+  try {
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getCardapio`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.cardapio)
+          ? data.cardapio
+          : null;
+
+    if (!list) {
+      throw new Error('Formato de resposta inválido para cardápio');
+    }
+
+    const normalized = list.map((item: Record<string, unknown>, i: number) =>
+      normalizeMenuItem(item, i)
+    );
+    localFallbackMenu = normalized;
+    return { items: normalized, isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao carregar cardápio. Usando dados de fallback.',
+      error
+    );
+    return { items: [...localFallbackMenu], isFallback: true };
+  }
+}
+
+export async function createOrder(
+  payload: CreateOrderPayload
+): Promise<{ orderId: string; isFallback: boolean }> {
+  try {
+    const res = await postToAppsScript<Record<string, unknown>>({
+      action: 'novoPedido',
+      cliente: payload.cliente,
+      whatsapp: payload.whatsapp,
+      endereco: payload.endereco,
+      itens: payload.itens,
+      total: payload.total,
+      pagamento: payload.pagamento,
+    });
+
+    const returnedId =
+      res.ID_Pedido ??
+      res.id_pedido ??
+      res.id ??
+      (typeof res.data === 'object' && res.data !== null
+        ? (res.data as Record<string, unknown>).ID_Pedido ??
+          (res.data as Record<string, unknown>).id_pedido
+        : undefined);
+
+    const orderId = returnedId
+      ? String(returnedId)
+      : `PED-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    return { orderId, isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao enviar pedido. Registrando em memória local de fallback.',
+      error
+    );
+    const orderId = `PED-${Math.floor(1050 + Math.random() * 8900)}`;
+    const newOrder: OrderRecord = {
+      ID_Pedido: orderId,
+      Data_Hora: new Date().toISOString(),
+      Cliente_Nome: payload.cliente,
+      Cliente_WhatsApp: payload.whatsapp,
+      Endereco: payload.endereco,
+      Itens_JSON: JSON.stringify(payload.itens),
+      Total: payload.total,
+      Forma_Pagamento: payload.pagamento,
+      Status: 'Pendente',
+    };
+    localFallbackOrders = [...localFallbackOrders, newOrder];
+    return { orderId, isFallback: true };
+  }
+}
+
+export async function fetchOrders(): Promise<{ orders: OrderRecord[]; isFallback: boolean }> {
+  try {
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getPedidos`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.pedidos)
+          ? data.pedidos
+          : null;
+
+    if (!list) {
+      throw new Error('Formato de resposta inválido para pedidos');
+    }
+
+    const normalized = list.map((item: Record<string, unknown>, i: number) =>
+      normalizeOrderRecord(item, i)
+    );
+    localFallbackOrders = normalized;
+    return { orders: normalized, isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao carregar pedidos. Usando dados de fallback.',
+      error
+    );
+    return { orders: [...localFallbackOrders], isFallback: true };
+  }
+}
+
+export async function saveMenuItem(
+  payload: SaveMenuItemPayload
+): Promise<{ item: MenuItem; isFallback: boolean }> {
+  const targetId = payload.id?.trim() || `TOB-${Date.now().toString().slice(-4)}`;
+  const normalizedItem: MenuItem = {
+    ID: targetId,
+    Nome: payload.nome,
+    Descricao: payload.descricao,
+    Preco: payload.preco,
+    Categoria: payload.categoria,
+    Imagem_URL: payload.imagem_url,
+    Disponivel: payload.disponivel,
+  };
+
+  try {
+    const res = await postToAppsScript<Record<string, unknown>>({
+      action: 'salvarPrato',
+      id: payload.id || '',
+      nome: payload.nome,
+      descricao: payload.descricao,
+      preco: payload.preco,
+      categoria: payload.categoria,
+      imagem_url: payload.imagem_url,
+      disponivel: payload.disponivel,
+    });
+
+    if (res.id || res.ID) {
+      normalizedItem.ID = String(res.id ?? res.ID);
+    }
+
+    return { item: normalizedItem, isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao salvar prato. Atualizando fallback local.',
+      error
+    );
+    const existingIndex = localFallbackMenu.findIndex((m) => m.ID === normalizedItem.ID);
+    if (existingIndex >= 0) {
+      localFallbackMenu[existingIndex] = normalizedItem;
+    } else {
+      localFallbackMenu = [normalizedItem, ...localFallbackMenu];
+    }
+    return { item: normalizedItem, isFallback: true };
+  }
+}
+
+export async function deleteMenuItem(id: string): Promise<{ isFallback: boolean }> {
+  try {
+    await postToAppsScript({
+      action: 'excluirPrato',
+      id,
+    });
+    return { isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao excluir prato. Atualizando fallback local.',
+      error
+    );
+    localFallbackMenu = localFallbackMenu.filter((m) => m.ID !== id);
+    return { isFallback: true };
+  }
+}
+
+export async function updateOrderStatus(
+  id_pedido: string,
+  status: OrderStatus
+): Promise<{ isFallback: boolean }> {
+  try {
+    await postToAppsScript({
+      action: 'atualizarStatus',
+      id_pedido,
+      status,
+    });
+    return { isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao atualizar status. Atualizando fallback local.',
+      error
+    );
+    localFallbackOrders = localFallbackOrders.map((o) =>
+      o.ID_Pedido === id_pedido ? { ...o, Status: status } : o
+    );
+    return { isFallback: true };
+  }
+}

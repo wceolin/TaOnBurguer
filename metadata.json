@@ -1,0 +1,6 @@
+{
+  "name": "Tá On Burger",
+  "description": "Cardápio digital e sistema de delivery artesanal da hamburgueria Tá On Burger, com painel administrativo integrado ao Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
