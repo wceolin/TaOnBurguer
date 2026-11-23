@@ -16,8 +16,14 @@ import {
   HERO_IMAGE_STORAGE_KEY,
   HERO_IMAGE_URL,
   STORE_OPEN_STORAGE_KEY,
+  TAONBURGER_CACHE_KEY,
 } from './data/fallbackData';
-import { fetchBannerConfig, fetchMenu, saveBannerConfig } from './services/api';
+import {
+  fetchInitialData,
+  readInitialDataCache,
+  saveBannerConfig,
+  writeInitialDataCache,
+} from './services/api';
 import type { CartItem, MenuItem, ToastMessage, ToastType } from './types';
 
 function readInitialStoreOpen(): boolean {
@@ -30,18 +36,13 @@ function readInitialStoreOpen(): boolean {
   }
 }
 
-function readCachedHeroImage(): string {
-  try {
-    const saved = window.localStorage.getItem(HERO_IMAGE_STORAGE_KEY);
-    return saved && saved.trim() ? saved : HERO_IMAGE_URL;
-  } catch {
-    return HERO_IMAGE_URL;
-  }
-}
-
 export default function App() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [loadingMenu, setLoadingMenu] = useState(true);
+  const [initialCache] = useState(() => readInitialDataCache());
+
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(
+    () => initialCache?.cardapio ?? []
+  );
+  const [loadingMenu, setLoadingMenu] = useState<boolean>(() => !initialCache);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Todos');
@@ -53,7 +54,10 @@ export default function App() {
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isStoreOpen, setIsStoreOpen] = useState<boolean>(readInitialStoreOpen);
-  const [heroImageUrl, setHeroImageUrl] = useState<string>(HERO_IMAGE_URL);
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(
+    () => initialCache?.bannerUrl ?? null
+  );
+  const [loadingBanner, setLoadingBanner] = useState<boolean>(() => !initialCache);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -90,6 +94,7 @@ export default function App() {
       const cleaned = newUrl.trim() || HERO_IMAGE_URL;
       await saveBannerConfig(cleaned);
       setHeroImageUrl(cleaned);
+      setLoadingBanner(false);
       try {
         window.localStorage.setItem(HERO_IMAGE_STORAGE_KEY, cleaned);
       } catch {
@@ -100,6 +105,17 @@ export default function App() {
     [showToast]
   );
 
+  const handleAdminMenuChanged = useCallback(
+    (updated: MenuItem[]) => {
+      setMenuItems(updated);
+      writeInitialDataCache({
+        cardapio: updated,
+        bannerUrl: heroImageUrl || HERO_IMAGE_URL,
+      });
+    },
+    [heroImageUrl]
+  );
+
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORE_OPEN_STORAGE_KEY && e.newValue !== null) {
@@ -108,6 +124,13 @@ export default function App() {
       if (e.key === HERO_IMAGE_STORAGE_KEY) {
         setHeroImageUrl(e.newValue && e.newValue.trim() ? e.newValue : HERO_IMAGE_URL);
       }
+      if (e.key === TAONBURGER_CACHE_KEY) {
+        const refreshed = readInitialDataCache();
+        if (refreshed) {
+          setMenuItems(refreshed.cardapio);
+          setHeroImageUrl(refreshed.bannerUrl);
+        }
+      }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -115,37 +138,25 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async (silent = false) => {
-      if (!silent) setLoadingMenu(true);
+    const load = async () => {
       try {
-        const [{ items }, bannerRes] = await Promise.all([
-          fetchMenu(),
-          fetchBannerConfig(),
-        ]);
+        const { cardapio, bannerUrl } = await fetchInitialData();
         if (mounted) {
-          setMenuItems(items);
-          if (bannerRes.bannerUrl) {
-            setHeroImageUrl(bannerRes.bannerUrl);
-            try {
-              window.localStorage.setItem(HERO_IMAGE_STORAGE_KEY, bannerRes.bannerUrl);
-            } catch {
-              // Ignore storage errors
-            }
-          } else if (bannerRes.isFallback) {
-            setHeroImageUrl(readCachedHeroImage());
-          }
+          setMenuItems(cardapio);
+          setHeroImageUrl(bannerUrl);
         }
       } finally {
-        if (mounted && !silent) {
+        if (mounted) {
           setLoadingMenu(false);
+          setLoadingBanner(false);
         }
       }
     };
-    void load(false);
+    void load();
 
     const intervalId = window.setInterval(() => {
       if (!isAdminMode) {
-        void load(true);
+        void load();
       }
     }, 30000);
 
@@ -251,10 +262,10 @@ export default function App() {
         <AdminPanel
           isStoreOpen={isStoreOpen}
           onToggleStoreOpen={handleToggleStoreOpen}
-          heroImageUrl={heroImageUrl}
+          heroImageUrl={heroImageUrl || HERO_IMAGE_URL}
           onUpdateHeroImage={handleUpdateHeroImage}
           onClose={() => setIsAdminMode(false)}
-          onMenuChanged={setMenuItems}
+          onMenuChanged={handleAdminMenuChanged}
           onShowToast={showToast}
         />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
@@ -272,7 +283,11 @@ export default function App() {
         onOpenCart={() => setIsCartOpen(true)}
       />
 
-      <HeroSection isStoreOpen={isStoreOpen} heroImageUrl={heroImageUrl} />
+      <HeroSection
+        isStoreOpen={isStoreOpen}
+        heroImageUrl={heroImageUrl}
+        loadingBanner={loadingBanner}
+      />
 
       <CategoryTabs
         categories={categories}
@@ -325,10 +340,11 @@ export default function App() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-            {filteredItems.map((item) => (
+            {filteredItems.map((item, index) => (
               <MenuCard
                 key={item.ID}
                 item={item}
+                priority={index < 4}
                 onSelect={setSelectedProduct}
                 onQuickAdd={(selected) => handleAddToCart(selected, 1, '')}
               />

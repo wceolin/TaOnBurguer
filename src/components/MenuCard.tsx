@@ -5,11 +5,17 @@ import { SafeImage } from './SafeImage';
 
 interface MenuCardProps {
   item: MenuItem;
+  priority?: boolean;
   onSelect: (item: MenuItem) => void;
   onQuickAdd: (item: MenuItem) => void;
 }
 
-export function MenuCard({ item, onSelect, onQuickAdd }: MenuCardProps) {
+export function MenuCard({
+  item,
+  priority = false,
+  onSelect,
+  onQuickAdd,
+}: MenuCardProps) {
   return (
     <article
       onClick={() => onSelect(item)}
@@ -30,6 +36,8 @@ export function MenuCard({ item, onSelect, onQuickAdd }: MenuCardProps) {
           src={item.Imagem_URL}
           alt={item.Nome}
           fallbackLabel={item.Nome}
+          optimizeWidth={500}
+          priority={priority}
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
       </div>
@@ -72,6 +80,8 @@ export function MenuCard({ item, onSelect, onQuickAdd }: MenuCardProps) {
             src={item.Imagem_URL}
             alt={item.Nome}
             fallbackLabel={item.Nome}
+            optimizeWidth={500}
+            priority={priority}
             className="w-full h-full object-cover"
           />
         </div>

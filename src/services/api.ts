@@ -1,4 +1,9 @@
-import { FALLBACK_MENU, FALLBACK_ORDERS } from '../data/fallbackData';
+import {
+  FALLBACK_MENU,
+  FALLBACK_ORDERS,
+  HERO_IMAGE_URL,
+  TAONBURGER_CACHE_KEY,
+} from '../data/fallbackData';
 import type {
   CreateOrderPayload,
   MenuItem,
@@ -350,6 +355,11 @@ export async function saveBannerConfig(
       action: 'salvarBanner',
       banner_url: bannerUrl,
     });
+    const currentCache = readInitialDataCache();
+    writeInitialDataCache({
+      cardapio: currentCache?.cardapio ?? localFallbackMenu,
+      bannerUrl,
+    });
     return { bannerUrl, isFallback: false };
   } catch (error) {
     console.warn(
@@ -357,6 +367,116 @@ export async function saveBannerConfig(
       error
     );
     return { bannerUrl, isFallback: true };
+  }
+}
+
+export interface InitialDataCache {
+  cardapio: MenuItem[];
+  bannerUrl: string;
+  updatedAt?: number;
+}
+
+export function readInitialDataCache(): InitialDataCache | null {
+  try {
+    const raw = window.localStorage.getItem(TAONBURGER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<InitialDataCache>;
+    if (!Array.isArray(parsed.cardapio)) return null;
+    const bannerUrl =
+      typeof parsed.bannerUrl === 'string' && parsed.bannerUrl.trim()
+        ? parsed.bannerUrl.trim()
+        : HERO_IMAGE_URL;
+    return {
+      cardapio: parsed.cardapio.map((item, idx) =>
+        normalizeMenuItem(item as unknown as Record<string, unknown>, idx)
+      ),
+      bannerUrl,
+      updatedAt: parsed.updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeInitialDataCache(data: {
+  cardapio: MenuItem[];
+  bannerUrl: string;
+}): void {
+  try {
+    const payload: InitialDataCache = {
+      cardapio: data.cardapio,
+      bannerUrl: data.bannerUrl,
+      updatedAt: Date.now(),
+    };
+    window.localStorage.setItem(TAONBURGER_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export async function fetchInitialData(): Promise<{
+  cardapio: MenuItem[];
+  bannerUrl: string;
+  isFallback: boolean;
+}> {
+  try {
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getInitialData`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as Record<string, unknown>;
+    const rawCardapio = Array.isArray(data?.cardapio) ? data.cardapio : null;
+    const rawConfig = Array.isArray(data?.config) ? data.config : [];
+
+    if (!rawCardapio) {
+      throw new Error('Formato de resposta inválido para getInitialData');
+    }
+
+    const cardapio = rawCardapio.map((item, idx) =>
+      normalizeMenuItem(item as Record<string, unknown>, idx)
+    );
+    localFallbackMenu = cardapio;
+
+    const bannerEntry = rawConfig.find(
+      (c) =>
+        String(
+          (c as Record<string, unknown>).Chave ??
+            (c as Record<string, unknown>).chave ??
+            ''
+        ).trim() === 'Banner_URL'
+    ) as Record<string, unknown> | undefined;
+
+    const rawBanner = bannerEntry
+      ? String(bannerEntry.Valor ?? bannerEntry.valor ?? '').trim()
+      : '';
+    const bannerUrl = rawBanner || HERO_IMAGE_URL;
+
+    writeInitialDataCache({ cardapio, bannerUrl });
+
+    return { cardapio, bannerUrl, isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao carregar getInitialData. Usando cache/fallback.',
+      error
+    );
+    const cached = readInitialDataCache();
+    if (cached) {
+      return {
+        cardapio: cached.cardapio,
+        bannerUrl: cached.bannerUrl,
+        isFallback: true,
+      };
+    }
+    return {
+      cardapio: [...localFallbackMenu],
+      bannerUrl: HERO_IMAGE_URL,
+      isFallback: true,
+    };
   }
 }
 

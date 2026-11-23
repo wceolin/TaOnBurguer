@@ -2,10 +2,15 @@ import { SafeImage } from './SafeImage';
 
 interface HeroSectionProps {
   isStoreOpen: boolean;
-  heroImageUrl: string;
+  heroImageUrl: string | null;
+  loadingBanner?: boolean;
 }
 
-export function HeroSection({ isStoreOpen, heroImageUrl }: HeroSectionProps) {
+export function HeroSection({
+  isStoreOpen,
+  heroImageUrl,
+  loadingBanner = false,
+}: HeroSectionProps) {
   return (
     <section
       id="top"
@@ -14,12 +19,21 @@ export function HeroSection({ isStoreOpen, heroImageUrl }: HeroSectionProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-6 sm:py-8">
         {/* Burger hero image right below header */}
         <div className="relative aspect-[16/9] sm:aspect-[21/9] lg:max-h-[380px] w-full rounded-2xl overflow-hidden bg-[#1E1E1E] border border-white/[0.08]">
-          <SafeImage
-            src={heroImageUrl}
-            alt="Hambúrguer artesanal duplo smash com queijo cheddar derretido e bacon crocante"
-            className="w-full h-full object-cover"
-            fallbackLabel="Tá On Burger"
-          />
+          {loadingBanner && !heroImageUrl ? (
+            <div
+              aria-label="Carregando imagem principal"
+              className="w-full h-full shimmer-dark"
+            />
+          ) : (
+            <SafeImage
+              src={heroImageUrl}
+              alt="Hambúrguer artesanal duplo smash com queijo cheddar derretido e bacon crocante"
+              className="w-full h-full object-cover"
+              fallbackLabel="Tá On Burger"
+              optimizeWidth={1200}
+              priority
+            />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#121212]/60 via-transparent to-transparent pointer-events-none" />
         </div>
 

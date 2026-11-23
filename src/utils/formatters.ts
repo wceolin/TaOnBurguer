@@ -1,5 +1,15 @@
 import type { OrderItemPayload, OrderStatus } from '../types';
 
+export function optimizeImageUrl(url: string | undefined, width: number): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (trimmed.includes('lh3.googleusercontent.com/d/') && !trimmed.includes('=w')) {
+    return `${trimmed}=w${width}`;
+  }
+  return trimmed;
+}
+
 export function formatCurrency(value: number): string {
   const safe = Number.isFinite(value) ? value : 0;
   return new Intl.NumberFormat('pt-BR', {

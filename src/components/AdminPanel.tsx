@@ -675,6 +675,7 @@ export function AdminPanel({
                           src={item.Imagem_URL}
                           alt={item.Nome}
                           fallbackLabel={item.Nome}
+                          optimizeWidth={300}
                           className="w-full h-full object-cover"
                         />
                       </div>
@@ -786,6 +787,7 @@ export function AdminPanel({
                         ? 'Cole um link válido abaixo para visualizar'
                         : 'Tá On Burger'
                     }
+                    optimizeWidth={1200}
                     className="w-full h-full object-cover"
                   />
                 </div>

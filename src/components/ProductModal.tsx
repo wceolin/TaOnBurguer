@@ -60,6 +60,8 @@ export function ProductModal({ item, onClose, onAddToCart }: ProductModalProps) 
             src={item.Imagem_URL}
             alt={item.Nome}
             fallbackLabel={item.Nome}
+            optimizeWidth={800}
+            priority
             className="w-full h-full object-cover"
           />
           <button
