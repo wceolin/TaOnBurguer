@@ -480,3 +480,164 @@ export async function fetchInitialData(): Promise<{
   }
 }
 
+export async function fetchCustomerOrders(telefone: string): Promise<{
+  orders: OrderRecord[];
+  isFallback: boolean;
+}> {
+  const cleanPhone = telefone.replace(/\D/g, '');
+  if (!cleanPhone) {
+    return { orders: [], isFallback: false };
+  }
+
+  try {
+    const response = await fetch(
+      `${GOOGLE_SCRIPT_URL}?action=getMeusPedidos&telefone=${encodeURIComponent(cleanPhone)}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.pedidos)
+          ? data.pedidos
+          : null;
+
+    if (!list) {
+      throw new Error('Formato de resposta inválido para Meus Pedidos');
+    }
+
+    const normalized = list.map((item: Record<string, unknown>, i: number) =>
+      normalizeOrderRecord(item, i)
+    );
+
+    normalized.sort((a: OrderRecord, b: OrderRecord) => {
+      const tA = new Date(a.Data_Hora).getTime();
+      const tB = new Date(b.Data_Hora).getTime();
+      if (Number.isNaN(tA) || Number.isNaN(tB)) return 0;
+      return tB - tA;
+    });
+
+    return { orders: normalized, isFallback: false };
+  } catch (error) {
+    console.warn(
+      '[Tá On Burger] API do Google Sheets indisponível ao consultar Meus Pedidos. Usando fallback local.',
+      error
+    );
+    const matching = localFallbackOrders
+      .filter((o) => o.Cliente_WhatsApp.replace(/\D/g, '') === cleanPhone)
+      .sort((a, b) => {
+        const tA = new Date(a.Data_Hora).getTime();
+        const tB = new Date(b.Data_Hora).getTime();
+        if (Number.isNaN(tA) || Number.isNaN(tB)) return 0;
+        return tB - tA;
+      });
+    return { orders: matching, isFallback: true };
+  }
+}
+
+export async function verifyAdminPassword(senha: string): Promise<{
+  valid: boolean;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'verificarSenha',
+        senha,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const text = await response.text();
+    const parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+
+    if (parsed && parsed.valid === true) {
+      return { valid: true };
+    }
+
+    return {
+      valid: false,
+      error: 'Senha incorreta',
+    };
+  } catch (error) {
+    console.warn('[Tá On Burger] Erro ao validar senha do painel admin:', error);
+    return {
+      valid: false,
+      error: 'Não foi possível validar a senha. Tente novamente.',
+    };
+  }
+}
+
+export async function changeAdminPassword(
+  senhaAtual: string,
+  novaSenha: string
+): Promise<{
+  success: boolean;
+  message?: string;
+}> {
+  try {
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'alterarSenha',
+        senha_atual: senhaAtual,
+        nova_senha: novaSenha,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const text = await response.text();
+    const parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+
+    const hasError =
+      parsed?.status === 'error' ||
+      parsed?.success === false ||
+      parsed?.valid === false ||
+      typeof parsed?.error === 'string' ||
+      typeof parsed?.erro === 'string';
+
+    if (hasError) {
+      const errorMsg =
+        parsed.message ??
+        parsed.mensagem ??
+        parsed.error ??
+        parsed.erro ??
+        'Senha atual incorreta.';
+      return {
+        success: false,
+        message: String(errorMsg),
+      };
+    }
+
+    return {
+      success: true,
+      message: String(
+        parsed?.message ?? parsed?.mensagem ?? 'Senha alterada com sucesso!'
+      ),
+    };
+  } catch (error) {
+    console.warn('[Tá On Burger] Erro ao alterar senha do painel admin:', error);
+    return {
+      success: false,
+      message: 'Não foi possível conectar ao servidor para alterar a senha.',
+    };
+  }
+}
+
+

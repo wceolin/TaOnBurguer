@@ -12,9 +12,14 @@ import {
   ShoppingBag,
   Trash2,
   Banknote,
+  Clock,
   X,
 } from 'lucide-react';
-import { STORE_WHATSAPP_NUMBER } from '../data/fallbackData';
+import {
+  CUSTOMER_PHONE_STORAGE_KEY,
+  CUSTOMER_PROFILE_STORAGE_KEY,
+  STORE_WHATSAPP_NUMBER,
+} from '../data/fallbackData';
 import { createOrder } from '../services/api';
 import type {
   CartItem,
@@ -36,6 +41,7 @@ interface CartCheckoutDrawerProps {
   onUpdateQuantity: (cartItemId: string, delta: number) => void;
   onRemoveItem: (cartItemId: string) => void;
   onClearCart: () => void;
+  onOpenMyOrders: () => void;
   onShowToast: (message: string, type?: ToastType) => void;
 }
 
@@ -58,6 +64,7 @@ export function CartCheckoutDrawer({
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
+  onOpenMyOrders,
   onShowToast,
 }: CartCheckoutDrawerProps) {
   const [step, setStep] = useState<DrawerStep>('cart');
@@ -77,6 +84,34 @@ export function CartCheckoutDrawer({
   const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderSummary | null>(
     null
   );
+
+  // Prefill saved customer info from localStorage whenever drawer opens
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const savedPhone = window.localStorage.getItem(CUSTOMER_PHONE_STORAGE_KEY);
+      if (savedPhone) {
+        setWhatsapp((prev) => prev || formatPhoneMask(savedPhone));
+      }
+      const savedProfileRaw = window.localStorage.getItem(CUSTOMER_PROFILE_STORAGE_KEY);
+      if (savedProfileRaw) {
+        const profile = JSON.parse(savedProfileRaw) as {
+          nome?: string;
+          rua?: string;
+          numero?: string;
+          bairro?: string;
+          complemento?: string;
+        };
+        if (profile.nome) setCustomerName((prev) => prev || profile.nome!);
+        if (profile.rua) setStreet((prev) => prev || profile.rua!);
+        if (profile.numero) setNumber((prev) => prev || profile.numero!);
+        if (profile.bairro) setNeighborhood((prev) => prev || profile.bairro!);
+        if (profile.complemento) setComplement((prev) => prev || profile.complemento!);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -156,6 +191,26 @@ export function CartCheckoutDrawer({
         total,
         pagamento: paymentLabel,
       });
+
+      // Persist customer phone, name, and address for future orders and My Orders tracking
+      try {
+        window.localStorage.setItem(
+          CUSTOMER_PHONE_STORAGE_KEY,
+          cleanPhone.replace(/\D/g, '')
+        );
+        window.localStorage.setItem(
+          CUSTOMER_PROFILE_STORAGE_KEY,
+          JSON.stringify({
+            nome: cleanName,
+            rua: cleanStreet,
+            numero: cleanNumber,
+            bairro: cleanNeighborhood,
+            complemento: complement.trim(),
+          })
+        );
+      } catch {
+        // Ignore storage errors
+      }
 
       setConfirmedOrder({
         orderId,
@@ -601,6 +656,18 @@ export function CartCheckoutDrawer({
                   <MessageCircle className="w-4 h-4" />
                   <span>Enviar resumo no WhatsApp</span>
                 </a>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleClose();
+                    onOpenMyOrders();
+                  }}
+                  className="w-full h-11 px-4 rounded-xl bg-[#FF6B00] hover:bg-[#FF7D1F] text-[#121212] font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Acompanhar Pedido</span>
+                </button>
 
                 <button
                   type="button"

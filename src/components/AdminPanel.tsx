@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type MouseEvent } from 'react';
 import {
   ArrowLeft,
   ClipboardList,
@@ -7,10 +7,12 @@ import {
   Eye,
   EyeOff,
   Image as ImageIcon,
+  KeyRound,
   Loader2,
   MapPin,
   Phone,
   Plus,
+  Printer,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -18,6 +20,7 @@ import {
 } from 'lucide-react';
 import { HERO_IMAGE_URL } from '../data/fallbackData';
 import {
+  changeAdminPassword,
   deleteMenuItem,
   fetchMenu,
   fetchOrders,
@@ -40,6 +43,7 @@ import {
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { MenuItemFormModal } from './MenuItemFormModal';
 import { SafeImage } from './SafeImage';
+import { openThermalPrintWindow } from '../utils/printReceipt';
 
 interface AdminPanelProps {
   isStoreOpen: boolean;
@@ -87,6 +91,13 @@ export function AdminPanel({
   const [isEditingHero, setIsEditingHero] = useState(false);
   const [draftHeroUrl, setDraftHeroUrl] = useState(heroImageUrl);
   const [savingHero, setSavingHero] = useState(false);
+
+  // Admin password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   useEffect(() => {
     if (!isEditingHero) {
@@ -180,6 +191,14 @@ export function AdminPanel({
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
   }, [loadOrders, loadAdminMenu]);
+
+  const handlePrintOrder = (e: MouseEvent<HTMLButtonElement>, order: OrderRecord) => {
+    e.stopPropagation();
+    const opened = openThermalPrintWindow(order);
+    if (!opened) {
+      onShowToast('Permita pop-ups no navegador para imprimir o cupom', 'error');
+    }
+  };
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     setUpdatingOrderId(orderId);
@@ -577,17 +596,28 @@ export function AdminPanel({
                         ))}
                       </div>
 
-                      {/* Footer: Payment & Total */}
-                      <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between gap-3 text-sm">
-                        <span className="text-xs text-zinc-400">
-                          Pagamento:{' '}
-                          <strong className="text-zinc-200 font-medium">
-                            {order.Forma_Pagamento}
-                          </strong>
-                        </span>
-                        <span className="font-mono font-bold text-base text-[#F59E0B] tabular-nums">
-                          {formatCurrency(order.Total)}
-                        </span>
+                      {/* Footer: Payment, Total & Print */}
+                      <div className="pt-2 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-3 text-sm">
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-xs text-zinc-400">
+                            Pagamento:{' '}
+                            <strong className="text-zinc-200 font-medium">
+                              {order.Forma_Pagamento}
+                            </strong>
+                          </span>
+                          <span className="font-mono font-bold text-base text-[#F59E0B] tabular-nums">
+                            {formatCurrency(order.Total)}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handlePrintOrder(e, order)}
+                          className="h-9 px-3 rounded-xl bg-[#121212] hover:bg-[#27272A] border border-white/[0.1] text-xs font-semibold text-zinc-200 hover:text-white flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-[#FF6B00]" />
+                          <span>Imprimir Cupom</span>
+                        </button>
                       </div>
                     </article>
                   );
@@ -892,6 +922,150 @@ export function AdminPanel({
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Seção Segurança / Alterar Senha */}
+            <div className="rounded-2xl bg-[#1E1E1E] border border-white/[0.08] p-4 sm:p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.08] text-[#FF6B00] flex items-center justify-center shrink-0">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-white">
+                    Segurança / Alterar Senha
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Atualize a senha de acesso ao Painel Administrativo.
+                  </p>
+                </div>
+              </div>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (updatingPassword) return;
+
+                  setPasswordError('');
+                  if (!currentPassword || !newPassword || !confirmNewPassword) {
+                    const msg = 'Preencha todos os campos de senha.';
+                    setPasswordError(msg);
+                    onShowToast(msg, 'error');
+                    return;
+                  }
+
+                  if (newPassword !== confirmNewPassword) {
+                    const msg = 'A nova senha e a confirmação não conferem.';
+                    setPasswordError(msg);
+                    onShowToast(msg, 'error');
+                    return;
+                  }
+
+                  setUpdatingPassword(true);
+                  try {
+                    const res = await changeAdminPassword(currentPassword, newPassword);
+                    if (res.success) {
+                      onShowToast(res.message || 'Senha alterada com sucesso!', 'success');
+                      setCurrentPassword('');
+                      setNewPassword('');
+                      setConfirmNewPassword('');
+                    } else {
+                      const errMsg = res.message || 'Não foi possível alterar a senha.';
+                      setPasswordError(errMsg);
+                      onShowToast(errMsg, 'error');
+                    }
+                  } finally {
+                    setUpdatingPassword(false);
+                  }
+                }}
+                className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1"
+              >
+                <div>
+                  <label
+                    htmlFor="admin-current-password"
+                    className="block text-xs font-medium text-zinc-300 mb-1.5"
+                  >
+                    Senha Atual
+                  </label>
+                  <input
+                    id="admin-current-password"
+                    type="password"
+                    required
+                    disabled={updatingPassword}
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    className="w-full h-10 px-3.5 rounded-xl bg-[#121212] border border-white/[0.1] text-sm text-white focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00] disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="admin-new-password"
+                    className="block text-xs font-medium text-zinc-300 mb-1.5"
+                  >
+                    Nova Senha
+                  </label>
+                  <input
+                    id="admin-new-password"
+                    type="password"
+                    required
+                    disabled={updatingPassword}
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    className="w-full h-10 px-3.5 rounded-xl bg-[#121212] border border-white/[0.1] text-sm text-white focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00] disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="admin-confirm-new-password"
+                    className="block text-xs font-medium text-zinc-300 mb-1.5"
+                  >
+                    Confirmar Nova Senha
+                  </label>
+                  <input
+                    id="admin-confirm-new-password"
+                    type="password"
+                    required
+                    disabled={updatingPassword}
+                    autoComplete="new-password"
+                    value={confirmNewPassword}
+                    onChange={(e) => {
+                      setConfirmNewPassword(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    className="w-full h-10 px-3.5 rounded-xl bg-[#121212] border border-white/[0.1] text-sm text-white focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00] disabled:opacity-60"
+                  />
+                </div>
+
+                {passwordError && (
+                  <p className="sm:col-span-3 text-xs text-red-400">{passwordError}</p>
+                )}
+
+                <div className="sm:col-span-3 flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={updatingPassword}
+                    className="h-10 px-5 rounded-xl bg-[#FF6B00] hover:bg-[#FF7D1F] text-[#121212] text-sm font-bold flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                  >
+                    {updatingPassword ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Atualizando...</span>
+                      </>
+                    ) : (
+                      <span>Atualizar Senha</span>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </section>
         )}

@@ -1,10 +1,11 @@
 import type { MenuItem, OrderRecord } from '../types';
 
-export const STORE_WHATSAPP_NUMBER = '5511999999999';
-export const ADMIN_PASSWORD = 'admin123';
+export const STORE_WHATSAPP_NUMBER = '5567981204026';
 export const STORE_OPEN_STORAGE_KEY = 'taon_store_open';
 export const HERO_IMAGE_STORAGE_KEY = 'taon_hero_image_url';
 export const TAONBURGER_CACHE_KEY = 'taonburger_cache';
+export const CUSTOMER_PHONE_STORAGE_KEY = 'taonburger_cliente_tel';
+export const CUSTOMER_PROFILE_STORAGE_KEY = 'taonburger_cliente_perfil';
 
 export const HERO_IMAGE_URL = '/src/assets/images/hero_burger_grill_1795390749519.jpg';
 

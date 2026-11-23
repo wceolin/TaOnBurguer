@@ -9,6 +9,7 @@ import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { MenuCard } from './components/MenuCard';
 import { MenuSkeleton } from './components/MenuSkeleton';
+import { MyOrdersModal } from './components/MyOrdersModal';
 import { ProductModal } from './components/ProductModal';
 import { ToastContainer } from './components/ToastContainer';
 import {
@@ -50,6 +51,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isMyOrdersOpen, setIsMyOrdersOpen] = useState(false);
 
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -281,6 +283,7 @@ export default function App() {
         cartCount={cartCount}
         cartTotal={cartTotal}
         onOpenCart={() => setIsCartOpen(true)}
+        onOpenMyOrders={() => setIsMyOrdersOpen(true)}
       />
 
       <HeroSection
@@ -362,7 +365,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-[#FF6B00]" />
-            <span>Tá On Burger · Hamburgueria Artesanal</span>
+            <span>Deu fome? A gente tá ON!</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -399,7 +402,13 @@ export default function App() {
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveCartItem}
         onClearCart={handleClearCart}
+        onOpenMyOrders={() => setIsMyOrdersOpen(true)}
         onShowToast={showToast}
+      />
+
+      <MyOrdersModal
+        isOpen={isMyOrdersOpen}
+        onClose={() => setIsMyOrdersOpen(false)}
       />
 
       <AdminAuthModal

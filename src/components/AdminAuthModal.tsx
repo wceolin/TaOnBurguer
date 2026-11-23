@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { Lock, X } from 'lucide-react';
-import { ADMIN_PASSWORD } from '../data/fallbackData';
+import { Loader2, Lock, X } from 'lucide-react';
+import { verifyAdminPassword } from '../services/api';
 
 interface AdminAuthModalProps {
   isOpen: boolean;
@@ -11,30 +11,43 @@ interface AdminAuthModalProps {
 export function AdminAuthModal({ isOpen, onClose, onSuccess }: AdminAuthModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setPassword('');
       setError('');
+      setVerifying(false);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
-      onSuccess();
-      onClose();
-    } else {
-      setError('Senha incorreta. Tente novamente.');
+    if (verifying) return;
+
+    setError('');
+    setVerifying(true);
+    try {
+      const result = await verifyAdminPassword(password);
+      if (result.valid) {
+        onSuccess();
+        onClose();
+      } else {
+        setError(result.error || 'Senha incorreta');
+      }
+    } finally {
+      setVerifying(false);
     }
   };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-      onClick={onClose}
+      onClick={() => {
+        if (!verifying) onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="admin-auth-title"
@@ -58,9 +71,10 @@ export function AdminAuthModal({ isOpen, onClose, onSuccess }: AdminAuthModalPro
 
           <button
             type="button"
+            disabled={verifying}
             onClick={onClose}
             aria-label="Fechar"
-            className="p-2 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+            className="p-2 text-zinc-400 hover:text-white rounded-lg cursor-pointer disabled:opacity-50"
           >
             <X className="w-4 h-4" />
           </button>
@@ -72,39 +86,39 @@ export function AdminAuthModal({ isOpen, onClose, onSuccess }: AdminAuthModalPro
               htmlFor="admin-password"
               className="block text-xs font-medium text-zinc-300 mb-1.5"
             >
-              Senha de acesso
+              Senha
             </label>
             <input
               id="admin-password"
               type="password"
               autoFocus
               required
+              disabled={verifying}
+              autoComplete="current-password"
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
                 if (error) setError('');
               }}
-              placeholder="Digite a senha (ex: admin123)"
-              className="w-full h-11 px-3.5 rounded-xl bg-[#121212] border border-white/[0.1] text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00]"
+              className="w-full h-11 px-3.5 rounded-xl bg-[#121212] border border-white/[0.1] text-sm text-white focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00] disabled:opacity-60"
             />
             {error && <p className="text-xs text-red-400 mt-1.5">{error}</p>}
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 h-11 rounded-xl bg-[#121212] hover:bg-zinc-800 border border-white/[0.08] text-sm font-semibold text-zinc-300 cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="flex-1 h-11 rounded-xl bg-[#FF6B00] hover:bg-[#FF7D1F] text-[#121212] text-sm font-bold cursor-pointer"
-            >
-              Entrar
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={verifying}
+            className="w-full h-11 rounded-xl bg-[#FF6B00] hover:bg-[#FF7D1F] text-[#121212] text-sm font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+          >
+            {verifying ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Verificando...</span>
+              </>
+            ) : (
+              <span>Entrar</span>
+            )}
+          </button>
         </form>
       </div>
     </div>
