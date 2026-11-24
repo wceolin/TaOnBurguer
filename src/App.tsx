@@ -10,7 +10,9 @@ import { HeroSection } from './components/HeroSection';
 import { MenuCard } from './components/MenuCard';
 import { MenuSkeleton } from './components/MenuSkeleton';
 import { MyOrdersModal } from './components/MyOrdersModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { ProductModal } from './components/ProductModal';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ToastContainer } from './components/ToastContainer';
 import {
   DEFAULT_CATEGORIES,
@@ -313,6 +315,8 @@ export default function App() {
         onOpenMyOrders={() => setIsMyOrdersOpen(true)}
       />
 
+      <OfflineIndicator />
+
       <HeroSection
         isStoreOpen={isStoreOpen}
         heroImageUrl={heroImageUrl}
@@ -382,6 +386,8 @@ export default function App() {
           </div>
         )}
       </main>
+
+      <PWAInstallBanner logoUrl={logoUrl} />
 
       {/* Footer with discreet Admin Lock access */}
       <footer
