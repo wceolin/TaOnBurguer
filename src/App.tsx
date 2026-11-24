@@ -28,6 +28,7 @@ import {
   writeInitialDataCache,
 } from './services/api';
 import type { CartItem, MenuItem, ToastMessage, ToastType } from './types';
+import { optimizeImageUrl } from './utils/formatters';
 
 function readInitialStoreOpen(): boolean {
   try {
@@ -143,6 +144,24 @@ export default function App() {
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
+
+  useEffect(() => {
+    if (!logoUrl) return;
+    const resolvedUrl = optimizeImageUrl(logoUrl, 256);
+
+    const upsertHeadLink = (rel: string) => {
+      let link = document.head.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = rel;
+        document.head.appendChild(link);
+      }
+      link.href = resolvedUrl;
+    };
+
+    upsertHeadLink('icon');
+    upsertHeadLink('apple-touch-icon');
+  }, [logoUrl]);
 
   useEffect(() => {
     let mounted = true;
