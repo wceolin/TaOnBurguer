@@ -2,6 +2,7 @@ import {
   FALLBACK_MENU,
   FALLBACK_ORDERS,
   HERO_IMAGE_URL,
+  LOGO_CACHE_KEY,
   TAONBURGER_CACHE_KEY,
 } from '../data/fallbackData';
 import type {
@@ -414,9 +415,29 @@ export function writeInitialDataCache(data: {
   }
 }
 
+export function readLogoCache(): string | null {
+  try {
+    const raw = window.localStorage.getItem(LOGO_CACHE_KEY);
+    return raw && raw.trim() ? raw.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeLogoCache(logoUrl: string): void {
+  try {
+    if (logoUrl.trim()) {
+      window.localStorage.setItem(LOGO_CACHE_KEY, logoUrl.trim());
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
 export async function fetchInitialData(): Promise<{
   cardapio: MenuItem[];
   bannerUrl: string;
+  logoUrl: string | null;
   isFallback: boolean;
 }> {
   try {
@@ -442,39 +463,46 @@ export async function fetchInitialData(): Promise<{
     );
     localFallbackMenu = cardapio;
 
-    const bannerEntry = rawConfig.find(
-      (c) =>
-        String(
-          (c as Record<string, unknown>).Chave ??
-            (c as Record<string, unknown>).chave ??
-            ''
-        ).trim() === 'Banner_URL'
-    ) as Record<string, unknown> | undefined;
+    const findConfigValue = (key: string): string => {
+      const entry = rawConfig.find(
+        (c) =>
+          String(
+            (c as Record<string, unknown>).Chave ??
+              (c as Record<string, unknown>).chave ??
+              ''
+          ).trim() === key
+      ) as Record<string, unknown> | undefined;
+      return entry ? String(entry.Valor ?? entry.valor ?? '').trim() : '';
+    };
 
-    const rawBanner = bannerEntry
-      ? String(bannerEntry.Valor ?? bannerEntry.valor ?? '').trim()
-      : '';
-    const bannerUrl = rawBanner || HERO_IMAGE_URL;
+    const bannerUrl = findConfigValue('Banner_URL') || HERO_IMAGE_URL;
+    const logoUrl = findConfigValue('Logo_URL') || null;
 
     writeInitialDataCache({ cardapio, bannerUrl });
+    if (logoUrl) {
+      writeLogoCache(logoUrl);
+    }
 
-    return { cardapio, bannerUrl, isFallback: false };
+    return { cardapio, bannerUrl, logoUrl, isFallback: false };
   } catch (error) {
     console.warn(
       '[Tá On Burger] API do Google Sheets indisponível ao carregar getInitialData. Usando cache/fallback.',
       error
     );
     const cached = readInitialDataCache();
+    const cachedLogo = readLogoCache();
     if (cached) {
       return {
         cardapio: cached.cardapio,
         bannerUrl: cached.bannerUrl,
+        logoUrl: cachedLogo,
         isFallback: true,
       };
     }
     return {
       cardapio: [...localFallbackMenu],
       bannerUrl: HERO_IMAGE_URL,
+      logoUrl: cachedLogo,
       isFallback: true,
     };
   }

@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Clock, Flame, Search, ShoppingBag, X } from 'lucide-react';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, optimizeImageUrl } from '../utils/formatters';
 
 interface HeaderProps {
+  logoUrl?: string | null;
   searchQuery: string;
   onSearchChange: (value: string) => void;
   cartCount: number;
@@ -12,6 +13,7 @@ interface HeaderProps {
 }
 
 export function Header({
+  logoUrl,
   searchQuery,
   onSearchChange,
   cartCount,
@@ -20,7 +22,12 @@ export function Header({
   onOpenMyOrders,
 }: HeaderProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [logoUrl]);
 
   useEffect(() => {
     if (isSearchOpen) {
@@ -83,10 +90,22 @@ export function Header({
               href="#top"
               className="flex items-center gap-2 text-base sm:text-lg font-display font-bold tracking-tight text-white whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] rounded-lg"
             >
-              <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#FF6B00] flex items-center justify-center text-[#121212]">
-                <Flame className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
-              </span>
-              <span>Tá On Burger</span>
+              {logoUrl && !logoError ? (
+                <img
+                  src={optimizeImageUrl(logoUrl, 200)}
+                  alt="Logo Tá On! Burger"
+                  referrerPolicy="no-referrer"
+                  loading="eager"
+                  fetchPriority="high"
+                  onError={() => setLogoError(true)}
+                  className="h-10 w-10 object-contain rounded-lg shrink-0"
+                />
+              ) : (
+                <span className="h-10 w-10 rounded-lg bg-[#FF6B00] flex items-center justify-center text-[#121212] shrink-0">
+                  <Flame className="w-5 h-5 fill-current" />
+                </span>
+              )}
+              <span>Tá On! Burger</span>
             </a>
 
             {/* Right actions: My Orders + Search icon + desktop bag */}

@@ -16,12 +16,14 @@ import {
   DEFAULT_CATEGORIES,
   HERO_IMAGE_STORAGE_KEY,
   HERO_IMAGE_URL,
+  LOGO_CACHE_KEY,
   STORE_OPEN_STORAGE_KEY,
   TAONBURGER_CACHE_KEY,
 } from './data/fallbackData';
 import {
   fetchInitialData,
   readInitialDataCache,
+  readLogoCache,
   saveBannerConfig,
   writeInitialDataCache,
 } from './services/api';
@@ -59,6 +61,7 @@ export default function App() {
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(
     () => initialCache?.bannerUrl ?? null
   );
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => readLogoCache());
   const [loadingBanner, setLoadingBanner] = useState<boolean>(() => !initialCache);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -133,6 +136,9 @@ export default function App() {
           setHeroImageUrl(refreshed.bannerUrl);
         }
       }
+      if (e.key === LOGO_CACHE_KEY) {
+        setLogoUrl(e.newValue && e.newValue.trim() ? e.newValue.trim() : null);
+      }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -142,10 +148,11 @@ export default function App() {
     let mounted = true;
     const load = async () => {
       try {
-        const { cardapio, bannerUrl } = await fetchInitialData();
+        const { cardapio, bannerUrl, logoUrl: fetchedLogoUrl } = await fetchInitialData();
         if (mounted) {
           setMenuItems(cardapio);
           setHeroImageUrl(bannerUrl);
+          setLogoUrl(fetchedLogoUrl);
         }
       } finally {
         if (mounted) {
@@ -278,6 +285,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#121212] text-zinc-100 flex flex-col">
       <Header
+        logoUrl={logoUrl}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         cartCount={cartCount}

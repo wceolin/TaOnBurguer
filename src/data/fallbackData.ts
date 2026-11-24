@@ -4,6 +4,7 @@ export const STORE_WHATSAPP_NUMBER = '5567981204026';
 export const STORE_OPEN_STORAGE_KEY = 'taon_store_open';
 export const HERO_IMAGE_STORAGE_KEY = 'taon_hero_image_url';
 export const TAONBURGER_CACHE_KEY = 'taonburger_cache';
+export const LOGO_CACHE_KEY = 'taonburger_logo_cache';
 export const CUSTOMER_PHONE_STORAGE_KEY = 'taonburger_cliente_tel';
 export const CUSTOMER_PROFILE_STORAGE_KEY = 'taonburger_cliente_perfil';
 
